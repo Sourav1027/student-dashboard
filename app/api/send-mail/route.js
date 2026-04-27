@@ -17,11 +17,7 @@ export async function POST(req) {
       from: "Test Mail <onboarding@resend.dev>",
       to: to_email,
       subject: "Hello",
-     html: `
-  <h2>Hello ${student_name} 👋</h2>
-  <p>Your admit card is ready.</p>
-  <p>Check attachment below.</p>
-`,
+      html: "<h2>Hello 👋</h2>",
     });
 
     return Response.json({ success: true, message: "Sent" });
