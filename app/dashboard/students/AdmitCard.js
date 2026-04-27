@@ -312,19 +312,16 @@ const AdmitCard = ({ student }) => {
 
         {/* DU Logo from Wikimedia */}
 
-        <img 
-
-          src="https://upload.wikimedia.org/wikipedia/en/b/b6/Delhi_University.svg" 
-
-          alt="DU Logo" 
-
-          className="header-logo"
-
-          style={{ height: '80px' }} /* SVG scaling fix */
-
-          onError={(e) => { e.target.style.display='none'; }}
-
-        />
+<img
+  src="/delhiuniversity.png"
+  alt="DU Logo"
+  crossOrigin="anonymous"
+  onLoad={() => console.log("image loaded")}
+  onError={(e) => {
+    e.target.style.display = "none";
+  }}
+  style={{ height: "80px" }}
+/>
 
       </div>
 

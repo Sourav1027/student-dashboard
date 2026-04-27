@@ -487,8 +487,10 @@ export default function StudentList() {
 
 const generatePdfBlob = async (studentData) => {
   const container = document.createElement("div");
+
   container.style.cssText =
     "position:fixed;left:-9999px;top:0;width:210mm;background:white;";
+
   document.body.appendChild(container);
 
   const { createRoot } = await import("react-dom/client");
@@ -496,35 +498,37 @@ const generatePdfBlob = async (studentData) => {
 
   root.render(<AdmitCard student={studentData} />);
 
-  // ✅ wait for render + fonts + images
   await document.fonts.ready;
 
-  await new Promise((resolve) => setTimeout(resolve, 800));
-
-  const images = container.querySelectorAll("img");
-  await Promise.all(
-    Array.from(images).map((img) => {
-      if (img.complete) return Promise.resolve();
+  // wait for images properly
+const waitForImages = () =>
+  Promise.all(
+    Array.from(container.querySelectorAll("img")).map((img) => {
       return new Promise((res) => {
-        img.onload = img.onerror = res;
+        if (img.complete && img.naturalWidth > 0) return res();
+
+        img.onload = () => res();
+        img.onerror = () => res();
       });
     })
   );
 
-  await new Promise((r) => requestAnimationFrame(() => r()));
-  await new Promise((r) => requestAnimationFrame(() => r()));
+  await waitForImages();
+
+  await new Promise((r) => setTimeout(r, 1000));
 
   const canvas = await html2canvas(container, {
     scale: 2,
     useCORS: true,
     allowTaint: false,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
   });
 
   root.unmount();
   document.body.removeChild(container);
 
   const imgData = canvas.toDataURL("image/jpeg", 1.0);
+
   const pdf = new jsPDF("p", "mm", "a4");
 
   const imgHeight = (canvas.height * 210) / canvas.width;
