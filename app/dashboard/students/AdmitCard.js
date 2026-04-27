@@ -1,6 +1,7 @@
 
 import React from 'react';
 import mapImage from "./map.png";
+import Image from 'next/image';
 
 
 const AdmitCard = ({ student }) => {
@@ -470,7 +471,7 @@ const AdmitCard = ({ student }) => {
         <h4 className="uppercase">Instructions to the Candidate:</h4>
 
 <div className="map-container">
-  <img 
+  <Image
     src={mapImage} 
     alt="Exam Centre Map" 
   />
