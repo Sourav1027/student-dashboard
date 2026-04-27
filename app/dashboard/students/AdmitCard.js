@@ -286,7 +286,7 @@ const AdmitCard = ({ student }) => {
 
         <img 
 
-          src="https://www.ajipt.org/wp-content/uploads/2021/07/logo.jpg" 
+          src="/logo.jpg"
 
           alt="Amar Jyoti Logo" 
 

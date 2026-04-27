@@ -251,7 +251,8 @@ const ConfirmModal = ({ count, onConfirm, onCancel }) => (
           lineHeight: 1.5,
         }}
       >
-        This action cannot be undone. The selected student{count > 1 ? "s" : ""} will be permanently removed.
+        This action cannot be undone. The selected student{count > 1 ? "s" : ""}{" "}
+        will be permanently removed.
       </p>
       <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
         <button
@@ -393,7 +394,9 @@ export default function StudentList() {
         });
 
         if (!data.length) {
-          showAlert("The uploaded Excel file appears to be empty. Please check your file and try again.");
+          showAlert(
+            "The uploaded Excel file appears to be empty. Please check your file and try again.",
+          );
           setIsImporting(false);
           e.target.value = "";
           return;
@@ -403,7 +406,7 @@ export default function StudentList() {
 
         for (const img of images) {
           const imgData = workbook.model.media.find(
-            (m) => m.index === img.imageId
+            (m) => m.index === img.imageId,
           );
           const rowIdx = img.range.tl.nativeRow;
           const colIdx = img.range.tl.nativeCol;
@@ -412,10 +415,18 @@ export default function StudentList() {
             const base64 = `data:image/${imgData.extension};base64,${imgData.buffer.toString("base64")}`;
             const student = data[rowIdx - 1];
             if (colIdx === 8) {
-              student.photo = await uploadImage(base64, student.First_Name, "photo");
+              student.photo = await uploadImage(
+                base64,
+                student.First_Name,
+                "photo",
+              );
             }
             if (colIdx === 9) {
-              student.signature = await uploadImage(base64, student.First_Name, "sign");
+              student.signature = await uploadImage(
+                base64,
+                student.First_Name,
+                "sign",
+              );
             }
           }
         }
@@ -451,8 +462,10 @@ export default function StudentList() {
         (s.Email || "").toLowerCase().includes(q);
       const matchS =
         statusFilter === "all" ||
-        (statusFilter === "sent" && (s.send_admit_card || "").includes("Sent")) ||
-        (statusFilter === "pending" && !(s.send_admit_card || "").includes("Sent"));
+        (statusFilter === "sent" &&
+          (s.send_admit_card || "").includes("Sent")) ||
+        (statusFilter === "pending" &&
+          !(s.send_admit_card || "").includes("Sent"));
       return matchQ && matchS;
     });
   }, [students, searchQuery, statusFilter]);
@@ -461,34 +474,68 @@ export default function StudentList() {
 
   const paginated = filtered.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   const sentCount = students.filter((s) =>
-    (s.send_admit_card || "").includes("Sent")
+    (s.send_admit_card || "").includes("Sent"),
   ).length;
 
   const pendingCount = students.filter(
-    (s) => !(s.send_admit_card || "").includes("Sent")
+    (s) => !(s.send_admit_card || "").includes("Sent"),
   ).length;
 
-  const generatePdfBlob = async (studentData) => {
-    const container = document.createElement("div");
-    container.style.cssText =
-      "position:fixed;left:-9999px;top:0;width:210mm;background:white;";
-    document.body.appendChild(container);
-    const { createRoot } = await import("react-dom/client");
-    const root = createRoot(container);
-    root.render(<AdmitCard student={studentData} />);
-    await new Promise((r) => setTimeout(r, 1200));
-    const canvas = await html2canvas(container, { scale: 2, useCORS: true });
-    root.unmount();
-    document.body.removeChild(container);
-    const imgData = canvas.toDataURL("image/jpeg", 1.0);
-    const pdf = new jsPDF("p", "mm", "a4");
-    pdf.addImage(imgData, "JPEG", 0, 0, 210, (canvas.height * 210) / canvas.width);
-    return { blob: pdf.output("blob"), dataUrl: pdf.output("datauristring") };
+const generatePdfBlob = async (studentData) => {
+  const container = document.createElement("div");
+  container.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:210mm;background:white;";
+  document.body.appendChild(container);
+
+  const { createRoot } = await import("react-dom/client");
+  const root = createRoot(container);
+
+  root.render(<AdmitCard student={studentData} />);
+
+  // ✅ wait for render + fonts + images
+  await document.fonts.ready;
+
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
+  const images = container.querySelectorAll("img");
+  await Promise.all(
+    Array.from(images).map((img) => {
+      if (img.complete) return Promise.resolve();
+      return new Promise((res) => {
+        img.onload = img.onerror = res;
+      });
+    })
+  );
+
+  await new Promise((r) => requestAnimationFrame(() => r()));
+  await new Promise((r) => requestAnimationFrame(() => r()));
+
+  const canvas = await html2canvas(container, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: false,
+    backgroundColor: "#ffffff",
+  });
+
+  root.unmount();
+  document.body.removeChild(container);
+
+  const imgData = canvas.toDataURL("image/jpeg", 1.0);
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  const imgHeight = (canvas.height * 210) / canvas.width;
+
+  pdf.addImage(imgData, "JPEG", 0, 0, 210, imgHeight);
+
+  return {
+    blob: pdf.output("blob"),
+    dataUrl: pdf.output("datauristring"),
   };
+};
 
   const handleViewAdmitCard = (student) => {
     setAdmitCardStudent(student);
@@ -528,12 +575,12 @@ export default function StudentList() {
           student_name: student.Name,
           pdf_attachment: dataUrl,
         },
-        EMAILJS_PUBLIC_KEY
+        EMAILJS_PUBLIC_KEY,
       );
       setStudents((prev) =>
         prev.map((s) =>
-          s.id === studentId ? { ...s, send_admit_card: "Sent" } : s
-        )
+          s.id === studentId ? { ...s, send_admit_card: "Sent" } : s,
+        ),
       );
       showToast(`Admit card sent to ${student.Name}`);
     } catch {
@@ -589,7 +636,7 @@ export default function StudentList() {
       successCount === ids.length
         ? `${successCount} student${successCount > 1 ? "s" : ""} deleted successfully`
         : `${successCount} of ${ids.length} deleted. Some failed.`,
-      successCount === ids.length ? "success" : "error"
+      successCount === ids.length ? "success" : "error",
     );
   };
 
@@ -654,7 +701,14 @@ export default function StudentList() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             {students.length > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={st.statChip}>
@@ -674,7 +728,11 @@ export default function StudentList() {
             <label style={st.importBtn}>
               {isImporting ? (
                 <>
-                  <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> Processing…
+                  <Loader2
+                    size={15}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />{" "}
+                  Processing…
                 </>
               ) : (
                 <>
@@ -698,13 +756,21 @@ export default function StudentList() {
               <Search
                 size={14}
                 color="#9CA3AF"
-                style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)" }}
+                style={{
+                  position: "absolute",
+                  left: 11,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
               />
               <input
                 style={st.searchInput}
                 placeholder="Search name, roll no, email…"
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
               />
             </div>
             <div style={{ display: "flex", gap: 6 }}>
@@ -712,8 +778,14 @@ export default function StudentList() {
                 <button
                   key={f}
                   className="tab-btn"
-                  onClick={() => { setStatusFilter(f); setCurrentPage(1); }}
-                  style={{ ...st.tabBtn, ...(statusFilter === f ? st.tabActive : {}) }}
+                  onClick={() => {
+                    setStatusFilter(f);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    ...st.tabBtn,
+                    ...(statusFilter === f ? st.tabActive : {}),
+                  }}
                 >
                   {f === "all" ? "All" : f === "pending" ? "Pending" : "Sent"}
                 </button>
@@ -731,7 +803,10 @@ export default function StudentList() {
                   style={st.deleteAllBtn}
                 >
                   {isDeletingAll ? (
-                    <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                    <Loader2
+                      size={13}
+                      style={{ animation: "spin 1s linear infinite" }}
+                    />
                   ) : (
                     <Trash2 size={13} />
                   )}
@@ -751,7 +826,10 @@ export default function StudentList() {
                     <th style={{ ...st.th, width: 44, paddingLeft: 20 }}>
                       <input
                         type="checkbox"
-                        checked={paginated.length > 0 && paginated.every((s) => selectedIds.has(s.id))}
+                        checked={
+                          paginated.length > 0 &&
+                          paginated.every((s) => selectedIds.has(s.id))
+                        }
                         onChange={toggleSelectAll}
                       />
                     </th>
@@ -770,21 +848,39 @@ export default function StudentList() {
                 {paginated.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={{ padding: 0, border: "none" }}>
-                      <div style={{ padding: "64px 24px", textAlign: "center" }}>
+                      <div
+                        style={{ padding: "64px 24px", textAlign: "center" }}
+                      >
                         <div
                           style={{
-                            width: 56, height: 56, borderRadius: 14,
-                            background: "#F9FAFB", border: "1px solid #E5E7EB",
-                            display: "flex", alignItems: "center", justifyContent: "center",
+                            width: 56,
+                            height: 56,
+                            borderRadius: 14,
+                            background: "#F9FAFB",
+                            border: "1px solid #E5E7EB",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                             margin: "0 auto 14px",
                           }}
                         >
                           <FileSpreadsheet size={28} color="#9CA3AF" />
                         </div>
-                        <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 5px" }}>
-                          {students.length === 0 ? "No students imported yet" : "No results found"}
+                        <p
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 600,
+                            color: "#374151",
+                            margin: "0 0 5px",
+                          }}
+                        >
+                          {students.length === 0
+                            ? "No students imported yet"
+                            : "No results found"}
                         </p>
-                        <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>
+                        <p
+                          style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}
+                        >
                           {students.length === 0
                             ? "Upload an .xlsx file using the Import button above"
                             : "Try adjusting your search or filter"}
@@ -801,7 +897,9 @@ export default function StudentList() {
                         ...st.tr,
                         background: selectedIds.has(student.id)
                           ? "#EFF6FF"
-                          : idx % 2 === 0 ? "#FFFFFF" : "#FAFAFA",
+                          : idx % 2 === 0
+                            ? "#FFFFFF"
+                            : "#FAFAFA",
                       }}
                     >
                       <td style={{ ...st.td, paddingLeft: 20, width: 44 }}>
@@ -811,33 +909,71 @@ export default function StudentList() {
                           onChange={() => toggleSelect(student.id)}
                         />
                       </td>
-                      <td style={st.td}><RollBadge value={student.Roll_No} /></td>
-                      <td style={{ ...st.td, fontWeight: 600, color: "#111827" }}>
+                      <td style={st.td}>
+                        <RollBadge value={student.Roll_No} />
+                      </td>
+                      <td
+                        style={{ ...st.td, fontWeight: 600, color: "#111827" }}
+                      >
                         {student.First_Name} {student.Last_Name}
                       </td>
-                      <td style={{ ...st.td, fontFamily: "'DM Mono',monospace", fontSize: 11, color: "#6B7280" }}>
+                      <td
+                        style={{
+                          ...st.td,
+                          fontFamily: "'DM Mono',monospace",
+                          fontSize: 11,
+                          color: "#6B7280",
+                        }}
+                      >
                         {student.Email}
                       </td>
-                      <td style={{ ...st.td, fontSize: 12, color: "#6B7280" }}>{student.Course}</td>
-                      <td style={st.td}><AvatarBox src={student.photo} type="photo" /></td>
-                      <td style={st.td}><AvatarBox src={student.signature} type="sig" /></td>
-                      <td style={st.td}><StatusBadge status={student.send_admit_card} /></td>
+                      <td style={{ ...st.td, fontSize: 12, color: "#6B7280" }}>
+                        {student.Course}
+                      </td>
+                      <td style={st.td}>
+                        <AvatarBox src={student.photo} type="photo" />
+                      </td>
+                      <td style={st.td}>
+                        <AvatarBox src={student.signature} type="sig" />
+                      </td>
+                      <td style={st.td}>
+                        <StatusBadge status={student.send_admit_card} />
+                      </td>
 
-                      <td style={{ ...st.td, textAlign: "center", position: "relative" }}>
+                      <td
+                        style={{
+                          ...st.td,
+                          textAlign: "center",
+                          position: "relative",
+                        }}
+                      >
                         <button
                           className="btn-action"
-                          onClick={() => setOpenDropdown(openDropdown === student.id ? null : student.id)}
+                          onClick={() =>
+                            setOpenDropdown(
+                              openDropdown === student.id ? null : student.id,
+                            )
+                          }
                           style={st.actionBtn}
                         >
                           {sendingIndex === student.id ? (
-                            <Loader2 size={15} style={{ animation: "spin 1s linear infinite", color: "#6B7280" }} />
+                            <Loader2
+                              size={15}
+                              style={{
+                                animation: "spin 1s linear infinite",
+                                color: "#6B7280",
+                              }}
+                            />
                           ) : (
                             <MoreVertical size={15} color="#6B7280" />
                           )}
                         </button>
 
                         {openDropdown === student.id && (
-                          <div style={st.dropdown} onClick={(e) => e.stopPropagation()}>
+                          <div
+                            style={st.dropdown}
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               className="dd-item"
                               style={{ ...st.ddItem, color: "#111827" }}
@@ -860,7 +996,12 @@ export default function StudentList() {
                               onClick={() => handleDownloadPdf(student)}
                             >
                               {pdfLoading === student.id ? (
-                                <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                                <Loader2
+                                  size={13}
+                                  style={{
+                                    animation: "spin 1s linear infinite",
+                                  }}
+                                />
                               ) : (
                                 <Download size={13} />
                               )}
@@ -872,41 +1013,59 @@ export default function StudentList() {
                               style={{ ...st.ddItem, color: "#EF4444" }}
                               onClick={async () => {
                                 try {
-                                  const res = await fetch("/api/delete_student", {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ id: student.id, status: "0" }),
-                                  });
+                                  const res = await fetch(
+                                    "/api/delete_student",
+                                    {
+                                      method: "PATCH",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                      },
+                                      body: JSON.stringify({
+                                        id: student.id,
+                                        status: "0",
+                                      }),
+                                    },
+                                  );
                                   const data = await res.json();
                                   if (data.success) {
                                     setStudents((prev) =>
                                       prev.map((s) =>
-                                        s.id === student.id ? { ...s, send_admit_card: "0" } : s
-                                      )
+                                        s.id === student.id
+                                          ? { ...s, send_admit_card: "0" }
+                                          : s,
+                                      ),
                                     );
-                                    showToast("Student removed successfully", "success");
+                                    showToast(
+                                      "Student removed successfully",
+                                      "success",
+                                    );
                                     const res2 = await fetch("/api/students");
                                     const fresh = await res2.json();
                                     if (fresh.students) {
-                                      const formatted = fresh.students.map((s) => ({
-                                        id: s.id,
-                                        Roll_No: s.roll_no,
-                                        Reference_No: s.reference_no,
-                                        First_Name: s.fname,
-                                        Last_Name: s.lname,
-                                        Name: `${s.fname} ${s.lname}`,
-                                        Email: s.email,
-                                        Phone: s.phone,
-                                        Course: s.course,
-                                        Category: s.category,
-                                        photo: s.photo,
-                                        signature: s.signature,
-                                        send_admit_card: s.send_admit_card,
-                                      }));
+                                      const formatted = fresh.students.map(
+                                        (s) => ({
+                                          id: s.id,
+                                          Roll_No: s.roll_no,
+                                          Reference_No: s.reference_no,
+                                          First_Name: s.fname,
+                                          Last_Name: s.lname,
+                                          Name: `${s.fname} ${s.lname}`,
+                                          Email: s.email,
+                                          Phone: s.phone,
+                                          Course: s.course,
+                                          Category: s.category,
+                                          photo: s.photo,
+                                          signature: s.signature,
+                                          send_admit_card: s.send_admit_card,
+                                        }),
+                                      );
                                       setStudents(formatted);
                                     }
                                   } else {
-                                    showToast("Failed to remove student", "error");
+                                    showToast(
+                                      "Failed to remove student",
+                                      "error",
+                                    );
                                   }
                                 } catch (err) {
                                   console.log(err);
@@ -931,14 +1090,24 @@ export default function StudentList() {
             <div style={st.pagination}>
               <span style={st.pageInfo}>
                 Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
-                {Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                {Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of{" "}
+                {filtered.length}
               </span>
               <div style={{ display: "flex", gap: 4 }}>
-                <button style={st.pageBtn} disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                <button
+                  style={st.pageBtn}
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                >
                   <ChevronLeft size={15} />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .filter(
+                    (p) =>
+                      p === 1 ||
+                      p === totalPages ||
+                      Math.abs(p - currentPage) <= 1,
+                  )
                   .reduce((acc, p, i, arr) => {
                     if (i > 0 && arr[i - 1] !== p - 1) acc.push("…");
                     acc.push(p);
@@ -946,19 +1115,35 @@ export default function StudentList() {
                   }, [])
                   .map((p, i) =>
                     p === "…" ? (
-                      <span key={`e${i}`} style={{ padding: "0 4px", color: "#9CA3AF", lineHeight: "30px" }}>…</span>
+                      <span
+                        key={`e${i}`}
+                        style={{
+                          padding: "0 4px",
+                          color: "#9CA3AF",
+                          lineHeight: "30px",
+                        }}
+                      >
+                        …
+                      </span>
                     ) : (
                       <button
                         key={p}
                         className={p === currentPage ? "" : "page-btn-num"}
                         onClick={() => setCurrentPage(p)}
-                        style={{ ...st.pageBtn, ...(p === currentPage ? st.pageBtnActive : {}) }}
+                        style={{
+                          ...st.pageBtn,
+                          ...(p === currentPage ? st.pageBtnActive : {}),
+                        }}
                       >
                         {p}
                       </button>
-                    )
+                    ),
                   )}
-                <button style={st.pageBtn} disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                <button
+                  style={st.pageBtn}
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                >
                   <ChevronRight size={15} />
                 </button>
               </div>
@@ -968,54 +1153,97 @@ export default function StudentList() {
       </div>
 
       {openDropdown !== null && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setOpenDropdown(null)} />
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 40 }}
+          onClick={() => setOpenDropdown(null)}
+        />
       )}
 
       {showAdmitCard && admitCardStudent && (
         <div
           style={{
-            position: "fixed", inset: 0, background: "rgba(15,23,42,0.75)",
-            backdropFilter: "blur(6px)", zIndex: 200, overflowY: "auto",
-            padding: "24px 16px 48px", animation: "overlayIn 0.2s ease",
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.75)",
+            backdropFilter: "blur(6px)",
+            zIndex: 200,
+            overflowY: "auto",
+            padding: "24px 16px 48px",
+            animation: "overlayIn 0.2s ease",
           }}
           onClick={() => setShowAdmitCard(false)}
         >
           <div
             style={{
-              position: "sticky", top: 0, zIndex: 210,
-              display: "flex", justifyContent: "center", gap: 10,
-              marginBottom: 20, padding: "8px 0",
+              position: "sticky",
+              top: 0,
+              zIndex: 210,
+              display: "flex",
+              justifyContent: "center",
+              gap: 10,
+              marginBottom: 20,
+              padding: "8px 0",
             }}
           >
             <button
               className="modal-dl-btn"
               style={st.modalActionBtn}
-              onClick={async (e) => { e.stopPropagation(); await handleDownloadPdf(admitCardStudent); }}
+              onClick={async (e) => {
+                e.stopPropagation();
+                await handleDownloadPdf(admitCardStudent);
+              }}
             >
               {pdfLoading === admitCardStudent.id ? (
-                <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Generating…</>
+                <>
+                  <Loader2
+                    size={14}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />{" "}
+                  Generating…
+                </>
               ) : (
-                <><Download size={14} /> Download PDF</>
+                <>
+                  <Download size={14} /> Download PDF
+                </>
               )}
             </button>
 
             <button
               className="modal-send-btn"
-              style={{ ...st.modalActionBtn, background: "#2563EB", border: "1px solid #2563EB", color: "#fff" }}
-              onClick={async (e) => { e.stopPropagation(); await handleSendEmail(admitCardStudent.id); }}
+              style={{
+                ...st.modalActionBtn,
+                background: "#2563EB",
+                border: "1px solid #2563EB",
+                color: "#fff",
+              }}
+              onClick={async (e) => {
+                e.stopPropagation();
+                await handleSendEmail(admitCardStudent.id);
+              }}
               disabled={sendingIndex === admitCardStudent.id}
             >
               {sendingIndex === admitCardStudent.id ? (
-                <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Sending…</>
+                <>
+                  <Loader2
+                    size={14}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />{" "}
+                  Sending…
+                </>
               ) : (
-                <><Send size={14} /> Send Email</>
+                <>
+                  <Send size={14} /> Send Email
+                </>
               )}
             </button>
 
             <button
               className="modal-close-btn"
               style={st.modalCloseBtn}
-              onClick={(e) => { e.stopPropagation(); setShowAdmitCard(false); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAdmitCard(false);
+              }}
             >
               <X size={15} /> Close
             </button>
@@ -1023,8 +1251,11 @@ export default function StudentList() {
 
           <div
             style={{
-              maxWidth: "210mm", margin: "0 auto", borderRadius: 6,
-              overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.4)",
+              maxWidth: "210mm",
+              margin: "0 auto",
+              borderRadius: 6,
+              overflow: "hidden",
+              boxShadow: "0 32px 80px rgba(0,0,0,0.4)",
               animation: "fadeUp 0.28s ease",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1052,11 +1283,17 @@ export default function StudentList() {
       {toast && (
         <div
           style={{
-            position: "fixed", bottom: 28, right: 28, zIndex: 9999,
+            position: "fixed",
+            bottom: 28,
+            right: 28,
+            zIndex: 9999,
             background: toast.type === "error" ? "#FEF2F2" : "#F0FDF4",
             border: `1px solid ${toast.type === "error" ? "#FECACA" : "#BBF7D0"}`,
-            borderRadius: 10, padding: "12px 18px",
-            display: "flex", alignItems: "center", gap: 9,
+            borderRadius: 10,
+            padding: "12px 18px",
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
             boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
             fontFamily: "'Bricolage Grotesque', sans-serif",
             fontSize: 13,
@@ -1085,107 +1322,243 @@ const styles = {
     fontFamily: "'Bricolage Grotesque', sans-serif",
   },
   header: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    marginBottom: 20, flexWrap: "wrap", gap: 14,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    flexWrap: "wrap",
+    gap: 14,
   },
   logoBox: {
-    width: 42, height: 42, borderRadius: 10,
-    background: "#EFF6FF", border: "1px solid #BFDBFE",
-    display: "flex", alignItems: "center", justifyContent: "center",
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    background: "#EFF6FF",
+    border: "1px solid #BFDBFE",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  title: { fontSize: 20, fontWeight: 700, color: "#111827", margin: 0, letterSpacing: "-0.3px" },
+  title: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: "#111827",
+    margin: 0,
+    letterSpacing: "-0.3px",
+  },
   subtitle: { fontSize: 12, color: "#6B7280", margin: "2px 0 0" },
   statChip: {
-    display: "flex", alignItems: "center", gap: 5,
-    background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px",
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    background: "#fff",
+    border: "1px solid #E5E7EB",
+    borderRadius: 8,
+    padding: "6px 12px",
   },
   importBtn: {
-    display: "flex", alignItems: "center", gap: 7,
-    background: "#1E3A5F", color: "#fff", border: "none", borderRadius: 9,
-    padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-    fontFamily: "'Bricolage Grotesque', sans-serif", letterSpacing: "-0.1px",
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    background: "#1E3A5F",
+    color: "#fff",
+    border: "none",
+    borderRadius: 9,
+    padding: "9px 18px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    letterSpacing: "-0.1px",
   },
-  toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" },
+  toolbar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+    flexWrap: "wrap",
+  },
   searchInput: {
-    width: "100%", padding: "9px 12px 9px 34px",
-    border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 13,
-    color: "#374151", outline: "none", background: "#fff",
+    width: "100%",
+    padding: "9px 12px 9px 34px",
+    border: "1px solid #E5E7EB",
+    borderRadius: 8,
+    fontSize: 13,
+    color: "#374151",
+    outline: "none",
+    background: "#fff",
     fontFamily: "'Bricolage Grotesque', sans-serif",
   },
   tabBtn: {
-    background: "transparent", border: "1px solid #E5E7EB", borderRadius: 8,
-    padding: "7px 14px", fontSize: 12, fontWeight: 500, cursor: "pointer",
-    color: "#6B7280", fontFamily: "'Bricolage Grotesque', sans-serif", transition: "all 0.12s",
+    background: "transparent",
+    border: "1px solid #E5E7EB",
+    borderRadius: 8,
+    padding: "7px 14px",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    color: "#6B7280",
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    transition: "all 0.12s",
   },
-  tabActive: { background: "#EFF6FF", border: "1px solid #BFDBFE", color: "#2563EB" },
+  tabActive: {
+    background: "#EFF6FF",
+    border: "1px solid #BFDBFE",
+    color: "#2563EB",
+  },
   batchBtn: {
-    display: "flex", alignItems: "center", gap: 6,
-    background: "#2563EB", color: "#fff", border: "none", borderRadius: 8,
-    padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "#2563EB",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "8px 16px",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
     fontFamily: "'Bricolage Grotesque', sans-serif",
   },
   deleteAllBtn: {
-    display: "flex", alignItems: "center", gap: 6,
-    background: "#fff", color: "#EF4444", border: "1px solid #FECACA", borderRadius: 8,
-    padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-    fontFamily: "'Bricolage Grotesque', sans-serif", transition: "all 0.12s",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "#fff",
+    color: "#EF4444",
+    border: "1px solid #FECACA",
+    borderRadius: 8,
+    padding: "8px 16px",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    transition: "all 0.12s",
   },
   card: {
-    background: "#fff", borderRadius: 14, border: "1px solid #E5E7EB",
-    overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.04)",
+    background: "#fff",
+    borderRadius: 14,
+    border: "1px solid #E5E7EB",
+    overflow: "hidden",
+    boxShadow: "0 1px 6px rgba(0,0,0,0.04)",
   },
   table: { width: "100%", borderCollapse: "collapse", minWidth: 900 },
   thead: { background: "#F8FAFC", borderBottom: "1px solid #E5E7EB" },
   th: {
-    padding: "11px 14px", fontSize: 10, fontWeight: 600, color: "#6B7280",
-    textAlign: "left", letterSpacing: "0.7px", textTransform: "uppercase", whiteSpace: "nowrap",
+    padding: "11px 14px",
+    fontSize: 10,
+    fontWeight: 600,
+    color: "#6B7280",
+    textAlign: "left",
+    letterSpacing: "0.7px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
   },
   tr: { borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" },
   td: { padding: "12px 14px", fontSize: 13, verticalAlign: "middle" },
   actionBtn: {
-    background: "#fff", border: "1px solid #E5E7EB", borderRadius: 7,
-    width: 30, height: 30, cursor: "pointer",
-    display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s",
+    background: "#fff",
+    border: "1px solid #E5E7EB",
+    borderRadius: 7,
+    width: 30,
+    height: 30,
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.12s",
   },
   dropdown: {
-    position: "absolute", right: 36, top: "50%", transform: "translateY(-50%)",
-    background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10,
-    width: 178, zIndex: 60, overflow: "hidden",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.10)", padding: "4px 0",
+    position: "absolute",
+    right: 36,
+    top: "50%",
+    transform: "translateY(-50%)",
+    background: "#fff",
+    border: "1px solid #E5E7EB",
+    borderRadius: 10,
+    width: 178,
+    zIndex: 60,
+    overflow: "hidden",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.10)",
+    padding: "4px 0",
   },
   ddItem: {
-    display: "flex", alignItems: "center", gap: 8, padding: "9px 14px",
-    fontSize: 12, fontWeight: 500, cursor: "pointer",
-    background: "transparent", border: "none", width: "100%", textAlign: "left",
-    fontFamily: "'Bricolage Grotesque', sans-serif", transition: "background 0.1s",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "9px 14px",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    background: "transparent",
+    border: "none",
+    width: "100%",
+    textAlign: "left",
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    transition: "background 0.1s",
   },
   ddDivider: { height: 1, background: "#F3F4F6", margin: "3px 0" },
   pagination: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "14px 20px", borderTop: "1px solid #F3F4F6",
-    background: "#FAFAFA", flexWrap: "wrap", gap: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "14px 20px",
+    borderTop: "1px solid #F3F4F6",
+    background: "#FAFAFA",
+    flexWrap: "wrap",
+    gap: 10,
   },
   pageInfo: { fontSize: 12, color: "#6B7280" },
   pageBtn: {
-    width: 32, height: 32, borderRadius: 7, background: "#fff",
-    border: "1px solid #E5E7EB", display: "inline-flex",
-    alignItems: "center", justifyContent: "center",
-    fontSize: 13, color: "#374151", cursor: "pointer",
+    width: 32,
+    height: 32,
+    borderRadius: 7,
+    background: "#fff",
+    border: "1px solid #E5E7EB",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    color: "#374151",
+    cursor: "pointer",
     transition: "all 0.12s",
   },
-  pageBtnActive: { background: "#2563EB", color: "#fff", border: "1px solid #2563EB", fontWeight: 700 },
+  pageBtnActive: {
+    background: "#2563EB",
+    color: "#fff",
+    border: "1px solid #2563EB",
+    fontWeight: 700,
+  },
   modalActionBtn: {
-    display: "inline-flex", alignItems: "center", gap: 7,
-    background: "#fff", border: "1px solid #D1D5DB", borderRadius: 9,
-    padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-    color: "#1E3A5F", fontFamily: "'Bricolage Grotesque', sans-serif",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.14)", transition: "all 0.15s",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    background: "#fff",
+    border: "1px solid #D1D5DB",
+    borderRadius: 9,
+    padding: "9px 20px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    color: "#1E3A5F",
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.14)",
+    transition: "all 0.15s",
   },
   modalCloseBtn: {
-    display: "inline-flex", alignItems: "center", gap: 7,
-    background: "#fff", border: "1px solid #D1D5DB", borderRadius: 9,
-    padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-    color: "#6B7280", fontFamily: "'Bricolage Grotesque', sans-serif",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.14)", transition: "all 0.15s",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    background: "#fff",
+    border: "1px solid #D1D5DB",
+    borderRadius: 9,
+    padding: "9px 18px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    color: "#6B7280",
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.14)",
+    transition: "all 0.15s",
   },
 };
