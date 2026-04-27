@@ -16,7 +16,7 @@ export async function GET() {
         photo,
         signature,
         send_admit_card
-       FROM students 
+       FROM students  WHERE status = '1'
        ORDER BY id DESC`
     );
 

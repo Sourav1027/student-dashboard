@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import AdmitCard from "./AdmitCard";
 import html2canvas from "html2canvas";
@@ -38,7 +39,6 @@ const StatusBadge = ({ status }) => {
         gap: 5,
         fontSize: 11,
         fontWeight: 600,
-        fontFamily: "'DM Mono', monospace",
         padding: "3px 10px",
         borderRadius: 20,
         background: isSent ? "#ECFDF5" : "#FFFBEB",
@@ -63,15 +63,8 @@ const StatusBadge = ({ status }) => {
 const RollBadge = ({ value }) => (
   <span
     style={{
-      fontFamily: "'DM Mono', monospace",
-      fontSize: 11,
+      fontSize: 14,
       fontWeight: 500,
-      background: "#EFF6FF",
-      color: "#2563EB",
-      border: "1px solid #BFDBFE",
-      borderRadius: 6,
-      padding: "3px 9px",
-      display: "inline-block",
     }}
   >
     {value}
@@ -196,6 +189,108 @@ const AlertModal = ({ message, onClose }) => (
   </div>
 );
 
+const ConfirmModal = ({ count, onConfirm, onCancel }) => (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15,23,42,0.6)",
+      backdropFilter: "blur(4px)",
+      zIndex: 9999,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      animation: "overlayIn 0.2s ease",
+    }}
+    onClick={onCancel}
+  >
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 16,
+        border: "1px solid #E5E7EB",
+        padding: "32px 28px 24px",
+        width: 360,
+        textAlign: "center",
+        boxShadow: "0 24px 64px rgba(0,0,0,0.18)",
+        animation: "fadeUp 0.25s ease",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          background: "#FEF2F2",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          margin: "0 auto 16px",
+        }}
+      >
+        <Trash2 size={24} color="#DC2626" />
+      </div>
+      <p
+        style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: "#111827",
+          margin: "0 0 8px",
+          fontFamily: "'Bricolage Grotesque', sans-serif",
+        }}
+      >
+        Delete {count} student{count > 1 ? "s" : ""}?
+      </p>
+      <p
+        style={{
+          fontSize: 13,
+          color: "#6B7280",
+          margin: "0 0 24px",
+          fontFamily: "'Bricolage Grotesque', sans-serif",
+          lineHeight: 1.5,
+        }}
+      >
+        This action cannot be undone. The selected student{count > 1 ? "s" : ""} will be permanently removed.
+      </p>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        <button
+          onClick={onCancel}
+          style={{
+            background: "#fff",
+            color: "#374151",
+            border: "1px solid #E5E7EB",
+            borderRadius: 9,
+            padding: "10px 28px",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          style={{
+            background: "#DC2626",
+            color: "#fff",
+            border: "none",
+            borderRadius: 9,
+            padding: "10px 28px",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 export default function StudentList() {
   const [students, setStudents] = useState([]);
 
@@ -251,6 +346,8 @@ export default function StudentList() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [toast, setToast] = useState(null);
   const [alertModal, setAlertModal] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -445,6 +542,57 @@ export default function StudentList() {
     setSendingIndex(null);
   };
 
+  const handleDeleteSelected = async () => {
+    setIsDeletingAll(true);
+    setConfirmDelete(false);
+    const ids = Array.from(selectedIds);
+    let successCount = 0;
+
+    for (const id of ids) {
+      try {
+        const res = await fetch("/api/delete_student", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, status: "0" }),
+        });
+        const data = await res.json();
+        if (data.success) successCount++;
+      } catch (err) {
+        console.log(err);
+      }
+    }
+
+    const res2 = await fetch("/api/students");
+    const fresh = await res2.json();
+    if (fresh.students) {
+      const formatted = fresh.students.map((s) => ({
+        id: s.id,
+        Roll_No: s.roll_no,
+        Reference_No: s.reference_no,
+        First_Name: s.fname,
+        Last_Name: s.lname,
+        Name: `${s.fname} ${s.lname}`,
+        Email: s.email,
+        Phone: s.phone,
+        Course: s.course,
+        Category: s.category,
+        photo: s.photo,
+        signature: s.signature,
+        send_admit_card: s.send_admit_card,
+      }));
+      setStudents(formatted);
+    }
+
+    setSelectedIds(new Set());
+    setIsDeletingAll(false);
+    showToast(
+      successCount === ids.length
+        ? `${successCount} student${successCount > 1 ? "s" : ""} deleted successfully`
+        : `${successCount} of ${ids.length} deleted. Some failed.`,
+      successCount === ids.length ? "success" : "error"
+    );
+  };
+
   const toggleSelect = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -483,6 +631,7 @@ export default function StudentList() {
         .modal-close-btn:hover { border-color: #FCA5A5 !important; background: #FEF2F2 !important; color: #DC2626 !important; }
         .modal-dl-btn:hover { background: #F8FAFC !important; }
         .modal-send-btn:hover { opacity: 0.88; }
+        .delete-all-btn:hover { background: #FEF2F2 !important; border-color: #FECACA !important; color: #DC2626 !important; }
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
         @keyframes slideUp { from{transform:translateY(16px);opacity:0} to{transform:translateY(0);opacity:1} }
@@ -571,9 +720,24 @@ export default function StudentList() {
               ))}
             </div>
             {selectedIds.size > 0 && (
-              <button style={st.batchBtn}>
-                <Send size={13} /> Send {selectedIds.size} Selected
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={st.batchBtn}>
+                  <Send size={13} /> Send {selectedIds.size} Selected
+                </button>
+                <button
+                  className="delete-all-btn"
+                  disabled={isDeletingAll}
+                  onClick={() => setConfirmDelete(true)}
+                  style={st.deleteAllBtn}
+                >
+                  {isDeletingAll ? (
+                    <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                  ) : (
+                    <Trash2 size={13} />
+                  )}
+                  Delete {selectedIds.size} Selected
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -620,7 +784,7 @@ export default function StudentList() {
                         <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 5px" }}>
                           {students.length === 0 ? "No students imported yet" : "No results found"}
                         </p>
-                        <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0, fontFamily: "'DM Mono', monospace" }}>
+                        <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>
                           {students.length === 0
                             ? "Upload an .xlsx file using the Import button above"
                             : "Try adjusting your search or filter"}
@@ -706,7 +870,50 @@ export default function StudentList() {
                             <button
                               className="dd-item dd-item-danger"
                               style={{ ...st.ddItem, color: "#EF4444" }}
-                              onClick={() => { setStudents((prev) => prev.filter((s) => s.id !== student.id)); setOpenDropdown(null); }}
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/delete_student", {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ id: student.id, status: "0" }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    setStudents((prev) =>
+                                      prev.map((s) =>
+                                        s.id === student.id ? { ...s, send_admit_card: "0" } : s
+                                      )
+                                    );
+                                    showToast("Student removed successfully", "success");
+                                    const res2 = await fetch("/api/students");
+                                    const fresh = await res2.json();
+                                    if (fresh.students) {
+                                      const formatted = fresh.students.map((s) => ({
+                                        id: s.id,
+                                        Roll_No: s.roll_no,
+                                        Reference_No: s.reference_no,
+                                        First_Name: s.fname,
+                                        Last_Name: s.lname,
+                                        Name: `${s.fname} ${s.lname}`,
+                                        Email: s.email,
+                                        Phone: s.phone,
+                                        Course: s.course,
+                                        Category: s.category,
+                                        photo: s.photo,
+                                        signature: s.signature,
+                                        send_admit_card: s.send_admit_card,
+                                      }));
+                                      setStudents(formatted);
+                                    }
+                                  } else {
+                                    showToast("Failed to remove student", "error");
+                                  }
+                                } catch (err) {
+                                  console.log(err);
+                                  showToast("Server error", "error");
+                                }
+                                setOpenDropdown(null);
+                              }}
                             >
                               <X size={13} /> Remove
                             </button>
@@ -834,6 +1041,14 @@ export default function StudentList() {
         />
       )}
 
+      {confirmDelete && (
+        <ConfirmModal
+          count={selectedIds.size}
+          onConfirm={handleDeleteSelected}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
       {toast && (
         <div
           style={{
@@ -879,7 +1094,7 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
   },
   title: { fontSize: 20, fontWeight: 700, color: "#111827", margin: 0, letterSpacing: "-0.3px" },
-  subtitle: { fontSize: 12, color: "#6B7280", margin: "2px 0 0", fontFamily: "'DM Mono', monospace" },
+  subtitle: { fontSize: 12, color: "#6B7280", margin: "2px 0 0" },
   statChip: {
     display: "flex", alignItems: "center", gap: 5,
     background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px",
@@ -909,6 +1124,12 @@ const styles = {
     padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer",
     fontFamily: "'Bricolage Grotesque', sans-serif",
   },
+  deleteAllBtn: {
+    display: "flex", alignItems: "center", gap: 6,
+    background: "#fff", color: "#EF4444", border: "1px solid #FECACA", borderRadius: 8,
+    padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+    fontFamily: "'Bricolage Grotesque', sans-serif", transition: "all 0.12s",
+  },
   card: {
     background: "#fff", borderRadius: 14, border: "1px solid #E5E7EB",
     overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.04)",
@@ -917,8 +1138,7 @@ const styles = {
   thead: { background: "#F8FAFC", borderBottom: "1px solid #E5E7EB" },
   th: {
     padding: "11px 14px", fontSize: 10, fontWeight: 600, color: "#6B7280",
-    textAlign: "left", letterSpacing: "0.7px", textTransform: "uppercase",
-    fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap",
+    textAlign: "left", letterSpacing: "0.7px", textTransform: "uppercase", whiteSpace: "nowrap",
   },
   tr: { borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" },
   td: { padding: "12px 14px", fontSize: 13, verticalAlign: "middle" },
@@ -945,13 +1165,13 @@ const styles = {
     padding: "14px 20px", borderTop: "1px solid #F3F4F6",
     background: "#FAFAFA", flexWrap: "wrap", gap: 10,
   },
-  pageInfo: { fontSize: 12, color: "#6B7280", fontFamily: "'DM Mono', monospace" },
+  pageInfo: { fontSize: 12, color: "#6B7280" },
   pageBtn: {
     width: 32, height: 32, borderRadius: 7, background: "#fff",
     border: "1px solid #E5E7EB", display: "inline-flex",
     alignItems: "center", justifyContent: "center",
     fontSize: 13, color: "#374151", cursor: "pointer",
-    transition: "all 0.12s", fontFamily: "'DM Mono', monospace",
+    transition: "all 0.12s",
   },
   pageBtnActive: { background: "#2563EB", color: "#fff", border: "1px solid #2563EB", fontWeight: 700 },
   modalActionBtn: {
