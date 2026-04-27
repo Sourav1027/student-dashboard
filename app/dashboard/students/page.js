@@ -22,11 +22,7 @@ import {
 import AdmitCard from "./AdmitCard";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import emailjs from "@emailjs/browser";
 
-const EMAILJS_PUBLIC_KEY = "ogiJCCAuPwljsowSx";
-const EMAILJS_SERVICE_ID = "service_f2qzy1e";
-const EMAILJS_TEMPLATE_ID = "template_dmj6kiy";
 const ITEMS_PER_PAGE = 10;
 
 const StatusBadge = ({ status }) => {
@@ -565,33 +561,45 @@ const waitForImages = () =>
     setPdfLoading(null);
   };
 
-  const handleSendEmail = async (studentId) => {
-    const student = students.find((s) => s.id === studentId);
-    setSendingIndex(studentId);
-    setOpenDropdown(null);
-    try {
-      const { dataUrl } = await generatePdfBlob(student);
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        {
-          to_email: student.Email,
-          student_name: student.Name,
-          pdf_attachment: dataUrl,
-        },
-        EMAILJS_PUBLIC_KEY,
-      );
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === studentId ? { ...s, send_admit_card: "Sent" } : s,
-        ),
-      );
-      showToast(`Admit card sent to ${student.Name}`);
-    } catch {
-      showToast("Failed to send email. Try again.", "error");
+const handleSendEmail = async (studentId) => {
+  const student = students.find((s) => s.id === studentId);
+
+  setSendingIndex(studentId);
+  setOpenDropdown(null);
+
+  try {
+    // const { dataUrl } = await generatePdfBlob(student);
+
+    // ✅ HERE: Resend API call
+   await fetch("/api/send-mail", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    to_email: student.Email,
+  }),
+});
+
+    const data = await res.json();
+
+    if (!data.success) {
+      throw new Error("Email failed");
     }
-    setSendingIndex(null);
-  };
+
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId
+          ? { ...s, send_admit_card: "Sent" }
+          : s
+      )
+    );
+
+    showToast(`Admit card sent to ${student.Name}`);
+  } catch (err) {
+    showToast("Failed to send email", "error");
+  }
+
+  setSendingIndex(null);
+};
 
   const handleDeleteSelected = async () => {
     setIsDeletingAll(true);
