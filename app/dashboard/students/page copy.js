@@ -1065,6 +1065,14 @@ export default function StudentList() {
                             >
                               <Eye size={13} color="#6B7280" /> View Admit Card
                             </button>
+                            {/* <button
+                              className="dd-item dd-item-accent"
+                              style={{ ...st.ddItem, color: "#2563EB" }}
+                              onClick={() => handleSendEmail(student.id)}
+                              disabled={sendingIndex === student.id}
+                            >
+                              <Send size={13} /> Send Email
+                            </button> */}
                             <div style={st.ddDivider} />
                             <button
                               className="dd-item"
