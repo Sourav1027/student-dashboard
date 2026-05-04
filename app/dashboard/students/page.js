@@ -1072,8 +1072,8 @@ export default function StudentList() {
                               disabled={sendingIndex === student.id}
                             >
                               <Send size={13} /> Send Email
-                            </button>
-                            <div style={st.ddDivider} /> */}
+                            </button> */}
+                            <div style={st.ddDivider} />
                             <button
                               className="dd-item"
                               style={{ ...st.ddItem, color: "#374151" }}
