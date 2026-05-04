@@ -56,12 +56,10 @@ export async function POST(req) {
       to: to_email,
       subject: "BPT Entrance Examination 2026 — Admit Card",
       html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">       
-        <div style="padding: 24px; background: #F9FAFB;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">   
           <p>Dear Candidate,</p>
           <p>Your admit card for BPT Entrance Examination 2026 is ready.</p>          
         </div>
-     
         
       </div>
       `,

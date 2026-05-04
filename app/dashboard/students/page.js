@@ -613,6 +613,64 @@ export default function StudentList() {
   };
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
+ const handleBulkSendEmails = async () => {
+  const ids = Array.from(selectedIds);
+  if (!ids.length) return;
+
+  setSendingIndex("bulk");
+
+  try {
+    for (const id of ids) {
+      const student = students.find((s) => s.id === id);
+      if (!student) continue;
+
+      const { dataUrl } = await generatePdfBlob(student);
+
+      await fetch("/api/send-mail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to_email: student.Email,
+          student_id: student.id,
+          pdf_base64: dataUrl,
+        }),
+      });
+
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, send_admit_card: "Sent" } : s
+        )
+      );
+    }
+
+    setStudents((prev) => {
+      const updated = prev.map((s) =>
+        ids.includes(s.id)
+          ? { ...s, send_admit_card: "Sent" }
+          : s
+      );
+
+      const sentCount = updated.filter((s) =>
+        (s.send_admit_card || "").includes("Sent")
+      ).length;
+
+      const pendingCount = updated.length - sentCount;
+
+      showToast(
+        `${ids.length} sent | Total Sent: ${sentCount} | Pending: ${pendingCount}`
+      );
+
+      return updated;
+    });
+
+    setSelectedIds(new Set());
+  } catch (err) {
+    console.error(err);
+    showToast("Bulk email failed", "error");
+  }
+
+  setSendingIndex(null);
+};
   const handleViewAdmitCard = (student) => {
     setAdmitCardStudent(student);
     setShowAdmitCard(true);
@@ -620,40 +678,40 @@ export default function StudentList() {
   };
 
   const handleDownloadPdf = async (student) => {
-  setPdfLoading(student.id);
-  setOpenDropdown(null);
+    setPdfLoading(student.id);
+    setOpenDropdown(null);
 
-  try {
-    const { blob } = await generatePdfBlob(student);
-    const base64 = await blobToBase64(blob);
+    try {
+      const { blob } = await generatePdfBlob(student);
+      const base64 = await blobToBase64(blob);
 
-    await fetch("/api/save_admit_card", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        roll_no: student.Roll_No,
-        fileName: `AdmitCard_${student.Roll_No}.pdf`,
-        pdf_base64: base64,
-      }),
-    });
+      await fetch("/api/save_admit_card", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          roll_no: student.Roll_No,
+          fileName: `AdmitCard_${student.Roll_No}.pdf`,
+          pdf_base64: base64,
+        }),
+      });
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `AdmitCard_${student.Roll_No}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `AdmitCard_${student.Roll_No}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
 
-    showToast(`PDF saved & downloaded for ${student.Roll_No}`);
-  } catch (err) {
-    console.error(err);
-    showToast("PDF failed", "error");
-  }
+      showToast(`PDF saved & downloaded for ${student.Roll_No}`);
+    } catch (err) {
+      console.error(err);
+      showToast("PDF failed", "error");
+    }
 
-  setPdfLoading(null);
-};
+    setPdfLoading(null);
+  };
 
   const handleSendEmail = async (studentId) => {
     const student = students.find((s) => s.id === studentId);
@@ -877,8 +935,20 @@ export default function StudentList() {
             </div>
             {selectedIds.size > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
-                <button style={st.batchBtn}>
-                  <Send size={13} /> Send {selectedIds.size} Selected
+                <button
+                  style={st.batchBtn}
+                  onClick={handleBulkSendEmails}
+                  disabled={sendingIndex === "bulk"}
+                >
+                  {sendingIndex === "bulk" ? (
+                    <Loader2
+                      size={13}
+                      style={{ animation: "spin 1s linear infinite" }}
+                    />
+                  ) : (
+                    <Send size={13} />
+                  )}
+                  Send {selectedIds.size} Selected
                 </button>
                 <button
                   className="delete-all-btn"
