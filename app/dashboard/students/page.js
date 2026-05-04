@@ -1,5 +1,12 @@
 "use client";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
+const blobToBase64 = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 import ExcelJS from "exceljs";
 import {
   MoreVertical,
@@ -25,6 +32,27 @@ import jsPDF from "jspdf";
 
 const ITEMS_PER_PAGE = 10;
 
+// ─── Image URL la base64 madhye convert karo (CORS fix) ───────────────────────
+const urlToBase64 = async (url) => {
+  if (!url) return null;
+  // Already base64 asel tar direct return karo
+  if (url.startsWith("data:")) return url;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return url;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => resolve(url); // fallback
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url; // fallback: original URL
+  }
+};
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const isSent = status?.includes("Sent");
   return (
@@ -57,14 +85,7 @@ const StatusBadge = ({ status }) => {
 };
 
 const RollBadge = ({ value }) => (
-  <span
-    style={{
-      fontSize: 14,
-      fontWeight: 500,
-    }}
-  >
-    {value}
-  </span>
+  <span style={{ fontSize: 14, fontWeight: 500 }}>{value}</span>
 );
 
 const AvatarBox = ({ src, type }) => {
@@ -112,7 +133,6 @@ const AlertModal = ({ message, onClose }) => (
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      animation: "overlayIn 0.2s ease",
     }}
     onClick={onClose}
   >
@@ -125,7 +145,6 @@ const AlertModal = ({ message, onClose }) => (
         width: 340,
         textAlign: "center",
         boxShadow: "0 24px 64px rgba(0,0,0,0.18)",
-        animation: "fadeUp 0.25s ease",
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -196,7 +215,6 @@ const ConfirmModal = ({ count, onConfirm, onCancel }) => (
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      animation: "overlayIn 0.2s ease",
     }}
     onClick={onCancel}
   >
@@ -209,7 +227,6 @@ const ConfirmModal = ({ count, onConfirm, onCancel }) => (
         width: 360,
         textAlign: "center",
         boxShadow: "0 24px 64px rgba(0,0,0,0.18)",
-        animation: "fadeUp 0.25s ease",
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -288,49 +305,9 @@ const ConfirmModal = ({ count, onConfirm, onCancel }) => (
   </div>
 );
 
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function StudentList() {
   const [students, setStudents] = useState([]);
-
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const res = await fetch("/api/students");
-        const data = await res.json();
-        if (data.students) {
-          const formatted = data.students.map((s) => ({
-            id: s.id,
-            Roll_No: s.roll_no,
-            Reference_No: s.reference_no,
-            First_Name: s.fname,
-            Last_Name: s.lname,
-            Name: `${s.fname} ${s.lname}`,
-            Email: s.email,
-            Phone: s.phone,
-            Course: s.course,
-            Category: s.category,
-            photo: s.photo,
-            signature: s.signature,
-            send_admit_card: s.send_admit_card,
-          }));
-          setStudents(formatted);
-        }
-      } catch (err) {
-        console.log(err);
-      }
-    };
-    fetchStudents();
-  }, []);
-
-  const uploadImage = async (base64, name, type) => {
-    const res = await fetch("/api/student_upload_img", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64, name, type }),
-    });
-    const data = await res.json();
-    return data.url;
-  };
-
   const [admitCardStudent, setAdmitCardStudent] = useState(null);
   const [showAdmitCard, setShowAdmitCard] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -346,15 +323,60 @@ export default function StudentList() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
 
+  const formatStudents = (list) =>
+    list.map((s) => ({
+      id: s.id,
+      Roll_No: s.roll_no,
+      Reference_No: s.reference_no,
+      First_Name: s.fname,
+      Last_Name: s.lname,
+      Name: `${s.fname} ${s.lname}`,
+      Email: s.email,
+      Phone: s.phone,
+      Course: s.course,
+      Category: s.category,
+      photo: s.photo,
+      signature: s.signature,
+      send_admit_card: s.send_admit_card,
+    }));
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const res = await fetch("/api/students");
+        const data = await res.json();
+        if (data.students) {
+          setStudents(formatStudents(data.students));
+        }
+      } catch (err) {
+        console.log(err);
+      }
+    };
+    fetchStudents();
+  }, []);
+
+  const refreshStudents = async () => {
+    const res = await fetch("/api/students");
+    const fresh = await res.json();
+    if (fresh.students) setStudents(formatStudents(fresh.students));
+  };
+
+  const uploadImage = async (base64, name, type) => {
+    const res = await fetch("/api/student_upload_img", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: base64, name, type }),
+    });
+    const data = await res.json();
+    return data.url;
+  };
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3200);
   };
 
-  const showAlert = (message) => {
-    setAlertModal({ message });
-  };
-
+  // ─── Import Excel ────────────────────────────────────────────────────────────
   const importFromExcel = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -390,16 +412,16 @@ export default function StudentList() {
         });
 
         if (!data.length) {
-          showAlert(
-            "The uploaded Excel file appears to be empty. Please check your file and try again.",
-          );
+          setAlertModal({
+            message:
+              "The uploaded Excel file appears to be empty. Please check your file and try again.",
+          });
           setIsImporting(false);
           e.target.value = "";
           return;
         }
 
         const images = ws.getImages();
-
         for (const img of images) {
           const imgData = workbook.model.media.find(
             (m) => m.index === img.imageId,
@@ -410,20 +432,18 @@ export default function StudentList() {
           if (imgData && data[rowIdx - 1]) {
             const base64 = `data:image/${imgData.extension};base64,${imgData.buffer.toString("base64")}`;
             const student = data[rowIdx - 1];
-            if (colIdx === 8) {
+            if (colIdx === 8)
               student.photo = await uploadImage(
                 base64,
                 student.First_Name,
                 "photo",
               );
-            }
-            if (colIdx === 9) {
+            if (colIdx === 9)
               student.signature = await uploadImage(
                 base64,
                 student.First_Name,
                 "sign",
               );
-            }
           }
         }
 
@@ -448,6 +468,7 @@ export default function StudentList() {
     reader.readAsArrayBuffer(file);
   };
 
+  // ─── Filter + Pagination ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return students.filter((s) => {
       const q = searchQuery.toLowerCase();
@@ -467,76 +488,131 @@ export default function StudentList() {
   }, [students, searchQuery, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-
   const paginated = filtered.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
   const sentCount = students.filter((s) =>
     (s.send_admit_card || "").includes("Sent"),
   ).length;
-
   const pendingCount = students.filter(
     (s) => !(s.send_admit_card || "").includes("Sent"),
   ).length;
 
-const generatePdfBlob = async (studentData) => {
-  const container = document.createElement("div");
+  // ─── PDF Generation — FIXED ──────────────────────────────────────────────────
+  const generatePdfBlob = async (studentData) => {
+    // STEP 1: Photo + Signature la base64 madhye convert karo — CORS issue fix
+    const processedStudent = { ...studentData };
+    if (processedStudent.photo) {
+      processedStudent.photo = await urlToBase64(processedStudent.photo);
+    }
+    if (processedStudent.signature) {
+      processedStudent.signature = await urlToBase64(
+        processedStudent.signature,
+      );
+    }
 
-  container.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:210mm;background:white;";
+    // STEP 2: Off-screen container banav
+    // IMPORTANT: position:absolute use karo, fixed nahi — html2canvas la fixed elements diste nahi
+    const container = document.createElement("div");
+    container.style.cssText = [
+      "position:absolute",
+      "left:-9999px",
+      "top:0",
+      "width:794px", // 210mm @ 96dpi ≈ 794px
+      "background:white",
+      "z-index:-1",
+      "overflow:visible",
+    ].join(";");
+    document.body.appendChild(container);
 
-  document.body.appendChild(container);
+    // STEP 3: React component render karo
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    root.render(<AdmitCard student={processedStudent} />);
 
-  const { createRoot } = await import("react-dom/client");
-  const root = createRoot(container);
+    // STEP 4: Fonts wait + images wait
+    await document.fonts.ready;
 
-  root.render(<AdmitCard student={studentData} />);
+    // Images load honyasathi wait
+    await new Promise((resolve) => {
+      const checkImages = () => {
+        const imgs = Array.from(container.querySelectorAll("img"));
+        if (imgs.length === 0) return resolve();
+        const pending = imgs.filter(
+          (img) => !img.complete || img.naturalWidth === 0,
+        );
+        if (pending.length === 0) return resolve();
+        let loaded = 0;
+        pending.forEach((img) => {
+          const done = () => {
+            loaded++;
+            if (loaded === pending.length) resolve();
+          };
+          img.addEventListener("load", done, { once: true });
+          img.addEventListener("error", done, { once: true });
+        });
+      };
+      // React render complete honyasathi thoda vel dya
+      setTimeout(checkImages, 300);
+    });
 
-  await document.fonts.ready;
+    // STEP 5: Extra settle time (layout, fonts render)
+    await new Promise((r) => setTimeout(r, 500));
 
-  // wait for images properly
-const waitForImages = () =>
-  Promise.all(
-    Array.from(container.querySelectorAll("img")).map((img) => {
-      return new Promise((res) => {
-        if (img.complete && img.naturalWidth > 0) return res();
+    // STEP 6: html2canvas — allowTaint:true base64 images sathi
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+      width: container.scrollWidth,
+      height: container.scrollHeight,
+      windowWidth: container.scrollWidth,
+      windowHeight: container.scrollHeight,
+    });
 
-        img.onload = () => res();
-        img.onerror = () => res();
-      });
-    })
-  );
+    // STEP 7: Cleanup
+    root.unmount();
+    document.body.removeChild(container);
 
-  await waitForImages();
+    // STEP 8: PDF banav
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    const imgWidthPx = canvas.width;
+    const imgHeightPx = canvas.height;
 
-  await new Promise((r) => setTimeout(r, 1000));
+    // A4 dimensions in mm
+    const a4W = 210;
+    const a4H = 297;
 
-  const canvas = await html2canvas(container, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: false,
-    backgroundColor: "#fff",
-  });
+    // Canvas aspect ratio pramaane height calculate karo
+    const imgHeightMm = (imgHeightPx * a4W) / imgWidthPx;
 
-  root.unmount();
-  document.body.removeChild(container);
+    // Admit card = always single page
+    // Content A4 peksha jaast asel tar shrink karun fit karo — extra page nahi
+    const finalH = Math.min(imgHeightMm, a4H);
 
-  const imgData = canvas.toDataURL("image/jpeg", 1.0);
+    // jsPDF — safe import (default export handle karo)
+    let JsPDF;
+    try {
+      const mod = await import("jspdf");
+      JsPDF = mod.default || mod.jsPDF;
+    } catch {
+      JsPDF = jsPDF; // top-level import fallback
+    }
 
-  const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new JsPDF("p", "mm", "a4");
+    // Single addImage call — guaranteed ek page
+    pdf.addImage(imgData, "JPEG", 0, 0, a4W, finalH);
 
-  const imgHeight = (canvas.height * 210) / canvas.width;
-
-  pdf.addImage(imgData, "JPEG", 0, 0, 210, imgHeight);
-
-  return {
-    blob: pdf.output("blob"),
-    dataUrl: pdf.output("datauristring"),
+    return {
+      blob: pdf.output("blob"),
+      dataUrl: pdf.output("datauristring"),
+    };
   };
-};
 
+  // ─── Handlers ────────────────────────────────────────────────────────────────
   const handleViewAdmitCard = (student) => {
     setAdmitCardStudent(student);
     setShowAdmitCard(true);
@@ -544,69 +620,85 @@ const waitForImages = () =>
   };
 
   const handleDownloadPdf = async (student) => {
-    setPdfLoading(student.id);
-    setOpenDropdown(null);
-    try {
-      const { blob } = await generatePdfBlob(student);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `AdmitCard_${student.Name}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast(`PDF downloaded for ${student.Name}`);
-    } catch {
-      showToast("PDF generation failed.", "error");
-    }
-    setPdfLoading(null);
-  };
-
-const handleSendEmail = async (studentId) => {
-  const student = students.find((s) => s.id === studentId);
-
-  setSendingIndex(studentId);
+  setPdfLoading(student.id);
   setOpenDropdown(null);
 
   try {
-    // const { dataUrl } = await generatePdfBlob(student);
+    const { blob } = await generatePdfBlob(student);
+    const base64 = await blobToBase64(blob);
 
-    // ✅ HERE: Resend API call
-   await fetch("/api/send-mail", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    to_email: student.Email,
-  }),
-});
+    await fetch("/api/save_admit_card", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        roll_no: student.Roll_No,
+        fileName: `AdmitCard_${student.Roll_No}.pdf`,
+        pdf_base64: base64,
+      }),
+    });
 
-    const data = await res.json();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `AdmitCard_${student.Roll_No}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
 
-    if (!data.success) {
-      throw new Error("Email failed");
-    }
-
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.id === studentId
-          ? { ...s, send_admit_card: "Sent" }
-          : s
-      )
-    );
-
-    showToast(`Admit card sent to ${student.Name}`);
+    showToast(`PDF saved & downloaded for ${student.Roll_No}`);
   } catch (err) {
-    showToast("Failed to send email", "error");
+    console.error(err);
+    showToast("PDF failed", "error");
   }
 
-  setSendingIndex(null);
+  setPdfLoading(null);
 };
+
+  const handleSendEmail = async (studentId) => {
+    const student = students.find((s) => s.id === studentId);
+    setSendingIndex(studentId);
+    setOpenDropdown(null);
+
+    try {
+      const { dataUrl } = await generatePdfBlob(student);
+
+      const res = await fetch("/api/send-mail", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to_email: student.Email,
+          student_id: student.id,
+          pdf_base64: dataUrl,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) throw new Error(data.message);
+
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId ? { ...s, send_admit_card: "Sent" } : s,
+        ),
+      );
+
+      showToast(`Admit card sent to ${student.Name}`);
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to send email", "error");
+    }
+
+    setSendingIndex(null);
+  };
 
   const handleDeleteSelected = async () => {
     setIsDeletingAll(true);
     setConfirmDelete(false);
     const ids = Array.from(selectedIds);
     let successCount = 0;
-
     for (const id of ids) {
       try {
         const res = await fetch("/api/delete_student", {
@@ -616,32 +708,9 @@ const handleSendEmail = async (studentId) => {
         });
         const data = await res.json();
         if (data.success) successCount++;
-      } catch (err) {
-        console.log(err);
-      }
+      } catch {}
     }
-
-    const res2 = await fetch("/api/students");
-    const fresh = await res2.json();
-    if (fresh.students) {
-      const formatted = fresh.students.map((s) => ({
-        id: s.id,
-        Roll_No: s.roll_no,
-        Reference_No: s.reference_no,
-        First_Name: s.fname,
-        Last_Name: s.lname,
-        Name: `${s.fname} ${s.lname}`,
-        Email: s.email,
-        Phone: s.phone,
-        Course: s.course,
-        Category: s.category,
-        photo: s.photo,
-        signature: s.signature,
-        send_admit_card: s.send_admit_card,
-      }));
-      setStudents(formatted);
-    }
-
+    await refreshStudents();
     setSelectedIds(new Set());
     setIsDeletingAll(false);
     showToast(
@@ -673,6 +742,7 @@ const handleSendEmail = async (studentId) => {
 
   const st = styles;
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -698,6 +768,7 @@ const handleSendEmail = async (studentId) => {
       `}</style>
 
       <div style={st.page}>
+        {/* ── Header ── */}
         <div style={st.header}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={st.logoBox}>
@@ -762,6 +833,7 @@ const handleSendEmail = async (studentId) => {
           </div>
         </div>
 
+        {/* ── Toolbar ── */}
         {students.length > 0 && (
           <div style={st.toolbar}>
             <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
@@ -829,6 +901,7 @@ const handleSendEmail = async (studentId) => {
           </div>
         )}
 
+        {/* ── Table ── */}
         <div style={st.card}>
           <div style={{ overflowX: "auto" }}>
             <table style={st.table}>
@@ -951,7 +1024,6 @@ const handleSendEmail = async (studentId) => {
                       <td style={st.td}>
                         <StatusBadge status={student.send_admit_card} />
                       </td>
-
                       <td
                         style={{
                           ...st.td,
@@ -993,7 +1065,7 @@ const handleSendEmail = async (studentId) => {
                             >
                               <Eye size={13} color="#6B7280" /> View Admit Card
                             </button>
-                            <button
+                            {/* <button
                               className="dd-item dd-item-accent"
                               style={{ ...st.ddItem, color: "#2563EB" }}
                               onClick={() => handleSendEmail(student.id)}
@@ -1001,7 +1073,7 @@ const handleSendEmail = async (studentId) => {
                             >
                               <Send size={13} /> Send Email
                             </button>
-                            <div style={st.ddDivider} />
+                            <div style={st.ddDivider} /> */}
                             <button
                               className="dd-item"
                               style={{ ...st.ddItem, color: "#374151" }}
@@ -1040,47 +1112,18 @@ const handleSendEmail = async (studentId) => {
                                   );
                                   const data = await res.json();
                                   if (data.success) {
-                                    setStudents((prev) =>
-                                      prev.map((s) =>
-                                        s.id === student.id
-                                          ? { ...s, send_admit_card: "0" }
-                                          : s,
-                                      ),
-                                    );
                                     showToast(
                                       "Student removed successfully",
                                       "success",
                                     );
-                                    const res2 = await fetch("/api/students");
-                                    const fresh = await res2.json();
-                                    if (fresh.students) {
-                                      const formatted = fresh.students.map(
-                                        (s) => ({
-                                          id: s.id,
-                                          Roll_No: s.roll_no,
-                                          Reference_No: s.reference_no,
-                                          First_Name: s.fname,
-                                          Last_Name: s.lname,
-                                          Name: `${s.fname} ${s.lname}`,
-                                          Email: s.email,
-                                          Phone: s.phone,
-                                          Course: s.course,
-                                          Category: s.category,
-                                          photo: s.photo,
-                                          signature: s.signature,
-                                          send_admit_card: s.send_admit_card,
-                                        }),
-                                      );
-                                      setStudents(formatted);
-                                    }
+                                    await refreshStudents();
                                   } else {
                                     showToast(
                                       "Failed to remove student",
                                       "error",
                                     );
                                   }
-                                } catch (err) {
-                                  console.log(err);
+                                } catch {
                                   showToast("Server error", "error");
                                 }
                                 setOpenDropdown(null);
@@ -1098,6 +1141,7 @@ const handleSendEmail = async (studentId) => {
             </table>
           </div>
 
+          {/* Pagination */}
           {filtered.length > ITEMS_PER_PAGE && (
             <div style={st.pagination}>
               <span style={st.pageInfo}>
@@ -1164,6 +1208,7 @@ const handleSendEmail = async (studentId) => {
         </div>
       </div>
 
+      {/* Dropdown overlay */}
       {openDropdown !== null && (
         <div
           style={{ position: "fixed", inset: 0, zIndex: 40 }}
@@ -1171,6 +1216,7 @@ const handleSendEmail = async (studentId) => {
         />
       )}
 
+      {/* Admit Card Modal */}
       {showAdmitCard && admitCardStudent && (
         <div
           style={{
@@ -1181,7 +1227,6 @@ const handleSendEmail = async (studentId) => {
             zIndex: 200,
             overflowY: "auto",
             padding: "24px 16px 48px",
-            animation: "overlayIn 0.2s ease",
           }}
           onClick={() => setShowAdmitCard(false)}
         >
@@ -1219,7 +1264,6 @@ const handleSendEmail = async (studentId) => {
                 </>
               )}
             </button>
-
             <button
               className="modal-send-btn"
               style={{
@@ -1248,7 +1292,6 @@ const handleSendEmail = async (studentId) => {
                 </>
               )}
             </button>
-
             <button
               className="modal-close-btn"
               style={st.modalCloseBtn}
@@ -1260,7 +1303,6 @@ const handleSendEmail = async (studentId) => {
               <X size={15} /> Close
             </button>
           </div>
-
           <div
             style={{
               maxWidth: "210mm",
@@ -1268,7 +1310,6 @@ const handleSendEmail = async (studentId) => {
               borderRadius: 6,
               overflow: "hidden",
               boxShadow: "0 32px 80px rgba(0,0,0,0.4)",
-              animation: "fadeUp 0.28s ease",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1283,7 +1324,6 @@ const handleSendEmail = async (studentId) => {
           onClose={() => setAlertModal(null)}
         />
       )}
-
       {confirmDelete && (
         <ConfirmModal
           count={selectedIds.size}
@@ -1292,6 +1332,7 @@ const handleSendEmail = async (studentId) => {
         />
       )}
 
+      {/* Toast */}
       {toast && (
         <div
           style={{

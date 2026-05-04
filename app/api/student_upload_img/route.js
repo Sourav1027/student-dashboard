@@ -22,7 +22,7 @@ export async function POST(req) {
     const filePath = path.join(dirPath, fileName);
     fs.writeFileSync(filePath, base64Data, "base64");
 
-    const base_url = "http://localhost:3000";
+    const base_url = process.env.NEXT_PUBLIC_BASE_URL;
     const imageUrl = `${base_url}/${folder}/${fileName}`;
 
     return Response.json({ url: imageUrl });

@@ -7,7 +7,7 @@ export default function DashboardHome() {
           <h3 className="text-gray-500">Total Students</h3>
           <p className="text-2xl font-bold">150</p>
         </div>
-        {/* Aur cards yahan add karein */}
+   
       </div>
     </div>
   );

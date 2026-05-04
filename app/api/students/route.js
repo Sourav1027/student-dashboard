@@ -15,6 +15,7 @@ export async function GET() {
         phone,
         photo,
         signature,
+        admit_card,
         send_admit_card
        FROM students  WHERE status = '1'
        ORDER BY id DESC`
@@ -61,4 +62,7 @@ export async function POST(req) {
     console.log("POST ERROR:", err);
     return Response.json({ error: "DB error" }, { status: 500 });
   }
+
+
+  
 }
